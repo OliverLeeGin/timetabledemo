@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="yellow_line_stroke_width">2dp</dimen>
+    <dimen name="txt_size">10dp</dimen>
+    <dimen name="scale_line_small">2dp</dimen>
+    <dimen name="scale_line_medium">2dp</dimen>
+    <dimen name="scale_line_large">2dp</dimen>
+    <dimen name="text_start_point">2dp</dimen>
+</resources>
