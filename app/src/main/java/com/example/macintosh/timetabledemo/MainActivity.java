@@ -56,14 +56,14 @@ public class MainActivity extends AppCompatActivity implements EventView.IScroll
 //        mRlTimeRulerContainer = findViewById(R.id.rlTimeRulerContainer);
 //        mRlStagesContainer = findViewById(R.id.rlStagesContainer);
 //        mRlEventsContainer = findViewById(R.id.rlEventsContainer);
-           //initViews();
+        //initViews();
     }
 
     @SuppressLint("ClickableViewAccessibility")
     private void initViews() {
         getListEvent();
         getWidthAndHeightOfTimetableContainer();
-      //  setListener();
+        //  setListener();
     }
 
     private void setListener() {
@@ -91,17 +91,26 @@ public class MainActivity extends AppCompatActivity implements EventView.IScroll
         List<Event> events3 = new ArrayList<>();
         events3.add(new Event(4, "D", "07:00", "08:00"));
         List<Event> events4 = new ArrayList<>();
-        events4.add(new Event(5, "A", "22:00", "23:30"));
+        events4.add(new Event(5, "E", "22:00", "23:30"));
+        List<Event> events5 = new ArrayList<>();
+        events5.add(new Event(6, "F", "02:00", "03:30"));
+        List<Event> events6 = new ArrayList<>();
+        events6.add(new Event(7, "G", "10:00", "12:30"));
+        List<Event> events7 = new ArrayList<>();
+        events7.add(new Event(8, "H", "22:00", "22:30"));
+        List<Event> events8 = new ArrayList<>();
+        events8.add(new Event(9, "J", "09:00", "03:30"));
+        List<Event> events9 = new ArrayList<>();
         mEvents.add(new Stage("RockA", 1, events));
         mEvents.add(new Stage("RockB", 2, events1));
         mEvents.add(new Stage("RockC", 3, events2));
         mEvents.add(new Stage("RockD", 4, events3));
         mEvents.add(new Stage("RockE", 5, events4));
-        mEvents.add(new Stage("RockE", 5, events4));
-        mEvents.add(new Stage("RockE", 5, events4));
-        mEvents.add(new Stage("RockE", 5, events4));
-        //
-        // "== mEvents.add(new Stage("RockF"));
+        mEvents.add(new Stage("RockF", 6, events5));
+        mEvents.add(new Stage("RockI", 7, events6));
+        mEvents.add(new Stage("RockH", 8, events7));
+        mEvents.add(new Stage("Rockm", 9, events8));
+        mEvents.add(new Stage("RockK", 10, events9));
     }
 
 

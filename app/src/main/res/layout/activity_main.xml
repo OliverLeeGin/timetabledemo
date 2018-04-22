@@ -4,7 +4,7 @@
     android:id="@+id/rlTimetableContainer"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#123456"
+    android:background="#111111"
     tools:context="com.example.macintosh.timetabledemo.MainActivity">
 
     <RelativeLayout
