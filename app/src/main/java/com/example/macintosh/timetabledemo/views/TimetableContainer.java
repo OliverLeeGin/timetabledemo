@@ -13,7 +13,6 @@ import android.graphics.Region;
 import android.graphics.Typeface;
 import android.support.v4.view.GestureDetectorCompat;
 import android.support.v4.view.ViewCompat;
-import android.util.Log;
 import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
@@ -70,9 +69,9 @@ public class TimetableContainer extends View {
 
     ///scale
     private ScaleGestureDetector mScaleDetector;
-    private final static float MIN_ZOOM = 1f;
-    private final static float MAX_ZOOM = 5f;
-    private float mScaleFactor = 1.f;
+    private final static float MIN_ZOOM = 1.0f;
+    private final static float MAX_ZOOM = 1.6f;
+    private float mScaleFactor = 1.0f;
 
     //These constants specify the mode that we're in
     private final static int NONE = 0;
@@ -133,12 +132,12 @@ public class TimetableContainer extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        super.onDraw(canvas);
 
         canvas.save();
 
         //We're going to scale the X and Y coordinates by the same amount
-        canvas.scale(this.mScaleFactor, this.mScaleFactor, this.mScaleDetector.getFocusX(), this.mScaleDetector.getFocusY());
+        canvas.scale(mScaleFactor, mScaleFactor);
+
         //If translateX times -1 is lesser than zero, let's set it to zero. This takes care of the left bound
         if ((mTranslateX * -1) < 0) {
             mTranslateX = 0;
@@ -164,7 +163,7 @@ public class TimetableContainer extends View {
         //We need to divide by the scale factor here, otherwise we end up with excessive panning based on our zoom level
         //because the translation amount also gets scaled according to how much we've zoomed into the canvas.
         canvas.translate(mTranslateX / mScaleFactor, mTranslateY / mScaleFactor);
-
+        super.onDraw(canvas);
 
         drawOlock(canvas);
         drawHeaderRowAndEvents(canvas);
@@ -181,8 +180,8 @@ public class TimetableContainer extends View {
         Paint paintOddBg = new Paint();
         paintOddBg.setColor(Color.GRAY);
 
-      //  if (mAreDimensionsInvalid) {
-         //   mAreDimensionsInvalid = false;
+        //  if (mAreDimensionsInvalid) {
+        //   mAreDimensionsInvalid = false;
 //            if (mScrollToHour >= 0)
 //                 goToHour(mScrollToHour);
 //
@@ -193,12 +192,12 @@ public class TimetableContainer extends View {
 
         // If the new mCurrentOrigin.y is invalid, make it valid.
         if (mCurrentOrigin.y < getHeight() - mHeightEachEvent * 24 - mHeightEachEvent)
-            mCurrentOrigin.y = getHeight() - mHeightEachEvent * 24 - mHeightEachEvent + mTranslateY;
+            mCurrentOrigin.y = getHeight() - mHeightEachEvent * 24 - mHeightEachEvent;
 
         // Don't put an "else if" because it will trigger a glitch when completely zoomed out and
         // scrolling vertically.
         if (mCurrentOrigin.y > 0) {
-            mCurrentOrigin.y = mTranslateY;
+            mCurrentOrigin.y = 0;
         }
 
         if (mCurrentOrigin.x < getWidth() - mWidthEachEvent * mSizeStagesList - mWidthEachEvent)
@@ -236,7 +235,6 @@ public class TimetableContainer extends View {
 //            }
 //        }
         for (int i = 0; i < mSizeStagesList; i++) {
-            Log.d("TAG", "drawHeaderRowAndEvents: ");
             if (mStages.get(i).getEvents().size() != 0) {
                 for (int j = 0; j < mStages.get(j).getEvents().size(); j++) {
                     mEventRects.add(new EventRect(null, mStages.get(i).getEvents().get(j)));
@@ -408,8 +406,8 @@ public class TimetableContainer extends View {
         paintOclock.setStyle(Paint.Style.STROKE);
         // TODO: 4/12/18 load bitmap but not saving on cache
         Bitmap bitmapOclick = BitmapFactory.decodeResource(getResources(), R.drawable.time);
-        canvas.drawBitmap(bitmapOclick, (mWidthEachEvent / 2 - bitmapOclick.getWidth() / 2) + mTranslateX,
-                (mHeightEachEvent / 2 - bitmapOclick.getHeight() / 2) +mTranslateY, paintOclock);
+        canvas.drawBitmap(bitmapOclick, (mWidthEachEvent / 2 - bitmapOclick.getWidth() / 2),
+                (mHeightEachEvent / 2 - bitmapOclick.getHeight() / 2), paintOclock);
     }
 
     private void drawEvents(Canvas canvas) {
@@ -446,7 +444,7 @@ public class TimetableContainer extends View {
                     String timeHourEnd = mStages.get(j).getEvents().get(k).getTimeEnd().substring(0, 2);
                     String timeMinEnd = mStages.get(j).getEvents().get(k).getTimeEnd().substring(3, 5);
                     if (Integer.parseInt(timeHourStart) == i) {
-                        Log.d("TAG", "drawEvent:x " + count++);
+                        // Log.d("TAG", "drawEvent:x " + count++);
 
                         float dy = top + ((Integer.parseInt(timeMinStart) * mNormalDistance) / 10);
                         float lastDy = top + mHeightEachEvent * (Integer.parseInt(timeHourEnd) - Integer.parseInt(timeHourStart))
@@ -544,9 +542,16 @@ public class TimetableContainer extends View {
 
         @Override
         public boolean onSingleTapConfirmed(MotionEvent e) {
+            float mDx = mTranslateX < 0 ? mTranslateX : 0;
+            float mDy = mTranslateY < 0 ? mTranslateY : 0;
             for (EventRect eventRect : mEventRects) {
                 if (eventRect.getRect() != null) {
-                    if (eventRect.getRect().contains(e.getX(), e.getY())) {
+                    RectF rectF = new RectF();
+                    rectF.top = eventRect.getRect().top * mScaleFactor + mDy;
+                    rectF.right = eventRect.getRect().right * mScaleFactor + mDx;
+                    rectF.left = eventRect.getRect().left * mScaleFactor + mDx;
+                    rectF.bottom = eventRect.getRect().bottom * mScaleFactor + mDy;
+                    if (rectF.contains(e.getX(), e.getY())) {
                         Toast.makeText(getContext(), "Name of events is " + eventRect.getEvent().getName(), Toast.LENGTH_SHORT).show();
                     }
                 }
@@ -572,7 +577,9 @@ public class TimetableContainer extends View {
             case MotionEvent.ACTION_MOVE:
                 mTranslateX = event.getX() - mStartX;
                 mTranslateY = event.getY() - mStartY;
-
+                //testing
+//                mTranslateX = 0;
+//                mTranslateY = 0;
                 //We cannot use startX and startY directly because we have adjusted their values using the previous translation values.
                 //This is why we need to add those values to startX and startY so that we can get the actual coordinates of the finger.
                 double distance = Math.sqrt(Math.pow(event.getX() - (mStartX + mPreviousTranslateX), 2) +
@@ -595,6 +602,7 @@ public class TimetableContainer extends View {
                 mPreviousTranslateX = mTranslateX;
                 mPreviousTranslateY = mTranslateY;
                 mCurrentScrollDirection = Direction.NONE;
+                mCurrentFlingDirection = Direction.NONE;
                 break;
 
             case MotionEvent.ACTION_POINTER_UP:
@@ -618,6 +626,14 @@ public class TimetableContainer extends View {
 
         return val;
     }
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        mHeightEventContainer = h;
+        mWidthEventContainer = w;
+    }
+
 
     private enum Direction {
         NONE, HORIZONTAL, VERTICAL
