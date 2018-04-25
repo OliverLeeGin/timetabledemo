@@ -53,7 +53,7 @@ public class MainActivity extends AppCompatActivity  {
         events8.add(new Event(9, "J", "09:00", "03:30"));
         List<Event> events9 = new ArrayList<>();
         mEvents.add(new Stage("RockA", 1, events));
-        mEvents.add(new Stage("RockB", 2, events1));
+        mEvents.add(new Stage("Rock Stages", 2, events1));
         mEvents.add(new Stage("RockC", 3, events2));
         mEvents.add(new Stage("RockD", 4, events3));
         mEvents.add(new Stage("RockE", 5, events4));

@@ -13,6 +13,9 @@ import android.graphics.Region;
 import android.graphics.Typeface;
 import android.support.v4.view.GestureDetectorCompat;
 import android.support.v4.view.ViewCompat;
+import android.text.Layout;
+import android.text.StaticLayout;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
@@ -32,7 +35,7 @@ import java.util.Locale;
 
 /**
  * Copyright © Nals
- * Created by macintosh on 4/19/18.
+ * Created by TrangLT on 4/19/18.
  */
 
 public class TimetableContainer extends View {
@@ -69,38 +72,29 @@ public class TimetableContainer extends View {
 
     ///scale
     private ScaleGestureDetector mScaleDetector;
-    private final static float MIN_ZOOM = 1.0f;
-    private final static float MAX_ZOOM = 1.6f;
-    private float mScaleFactor = 1.0f;
-
-    //These constants specify the mode that we're in
-    private final static int NONE = 0;
-    private final static int DRAG = 1;
-    private final static int ZOOM = 2;
-    private int mMode;
-    private boolean mDragged;
-
-    //These two variables keep track of the X and Y coordinate of the finger when it first
-    //touches the screen
-    private float mStartX = 0f;
-    private float mStartY = 0f;
-    //These two variables keep track of the amount we need to translate the canvas along the X
-    //and the Y coordinate
-    private float mTranslateX = 0f;
-    private float mTranslateY = 0f;
-    //These two variables keep track of the amount we translated the X and Y coordinates, the last time we
-    //panned.
-    private float mPreviousTranslateX = 0f;
-    private float mPreviousTranslateY = 0f;
+    private int mNewWidthEachEvent;
+    private int mNewHeightEachEvent;
+    private int mWidthHeader;
+    private int mHeightHeader;
+    private int mMinHourHeight; //no minimum specified (will be dynamic, based on screen)
+    private int mEffectiveMinHourHeight; //compensates for the fact that you can't keep zooming out.
+    private int mMaxHourHeight = 120;
+    private int mMinHourWidth; //no minimum specified (will be dynamic, based on screen)
+    private int mEffectiveMinHourWidth; //compensates for the fact that you can't keep zooming out.
+    private int mMaxHourWidth = 180;
 
     public TimetableContainer(Context context, List<Stage> stages, int width, int height) {
         super(context);
+        mWidthHeader = width / 5;
+        mHeightHeader = height / 12;
         mWidthEachEvent = (width - (width / 5)) / 4;
         mWidthEventContainer = width;
         mHeightEventContainer = height;
+        mMinHourHeight = height / 12;
+        mEffectiveMinHourHeight = mMinHourHeight;
+        mMinHourWidth = (width - (width / 5)) / 4;
+        mEffectiveMinHourWidth = mMinHourWidth;
         mHeightEachEvent = height / 12;
-        mNormalDistance = mHeightEachEvent / TOTAL_DISTANCE_EACH_NORNAL_TIME_STONE;
-        mLargeDistance = mHeightEachEvent / TOTAL_DISTANCE_EACH_LARGE_TIME_STONE;
         mStages = stages;
         initScroll(context);
         // mScrollListener = scrollListener;
@@ -117,8 +111,11 @@ public class TimetableContainer extends View {
     private class ScaleListener extends ScaleGestureDetector.SimpleOnScaleGestureListener {
         @Override
         public boolean onScale(ScaleGestureDetector detector) {
-            mScaleFactor *= detector.getScaleFactor();
-            mScaleFactor = Math.max(MIN_ZOOM, Math.min(mScaleFactor, MAX_ZOOM));
+            // mScaleFactor *= detector.getScaleFactor();
+            //mScaleFactor = Math.max(MIN_ZOOM, Math.min(mScaleFactor, MAX_ZOOM));
+            mNewHeightEachEvent = Math.round(mHeightEachEvent * detector.getScaleFactor());
+            mNewWidthEachEvent = Math.round(mWidthEachEvent * detector.getScaleFactor());
+            invalidate();
             return true;
         }
     }
@@ -132,44 +129,10 @@ public class TimetableContainer extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
-
-        canvas.save();
-
-        //We're going to scale the X and Y coordinates by the same amount
-        canvas.scale(mScaleFactor, mScaleFactor);
-
-        //If translateX times -1 is lesser than zero, let's set it to zero. This takes care of the left bound
-        if ((mTranslateX * -1) < 0) {
-            mTranslateX = 0;
-        }
-
-        //This is where we take care of the right bound. We compare translateX times -1 to (scaleFactor - 1) * displayWidth.
-        //If translateX is greater than that value, then we know that we've gone over the bound. So we set the value of
-        //translateX to (1 - scaleFactor) times the display width. Notice that the terms are interchanged; it's the same
-        //as doing -1 * (scaleFactor - 1) * displayWidth
-        else if ((mTranslateX * -1) > (mScaleFactor - 1) * mWidthEventContainer) {
-            mTranslateX = (1 - mScaleFactor) * mWidthEventContainer;
-        }
-
-        if (mTranslateY * -1 < 0) {
-            mTranslateY = 0;
-        }
-
-        //We do the exact same thing for the bottom bound, except in this case we use the height of the display
-        else if ((mTranslateY * -1) > (mScaleFactor - 1) * mHeightEventContainer) {
-            mTranslateY = (1 - mScaleFactor) * mHeightEventContainer;
-        }
-
-        //We need to divide by the scale factor here, otherwise we end up with excessive panning based on our zoom level
-        //because the translation amount also gets scaled according to how much we've zoomed into the canvas.
-        canvas.translate(mTranslateX / mScaleFactor, mTranslateY / mScaleFactor);
         super.onDraw(canvas);
-
         drawOlock(canvas);
         drawHeaderRowAndEvents(canvas);
         drawTime(canvas);
-              /* The rest of your canvas-drawing code */
-        canvas.restore();
     }
 
     private void drawHeaderRowAndEvents(Canvas canvas) {
@@ -180,15 +143,28 @@ public class TimetableContainer extends View {
         Paint paintOddBg = new Paint();
         paintOddBg.setColor(Color.GRAY);
 
-        //  if (mAreDimensionsInvalid) {
-        //   mAreDimensionsInvalid = false;
-//            if (mScrollToHour >= 0)
-//                 goToHour(mScrollToHour);
-//
-//                mScrollToDay = null;
-//            mScrollToHour = -1;
-//            mAreDimensionsInvalid = false;
-//        }
+        if (mNewHeightEachEvent > 0) {
+            if (mNewHeightEachEvent < mEffectiveMinHourHeight)
+                mNewHeightEachEvent = mEffectiveMinHourHeight;
+            else if (mNewHeightEachEvent > mMaxHourHeight)
+                mNewHeightEachEvent = mMaxHourHeight;
+
+            mCurrentOrigin.y = (mCurrentOrigin.y / mHeightEachEvent) * mNewHeightEachEvent;
+            mHeightEachEvent = mNewHeightEachEvent;
+            mNewHeightEachEvent = -1;
+        }
+        if (mNewWidthEachEvent > 0) {
+            if (mNewWidthEachEvent < mEffectiveMinHourWidth)
+                mNewWidthEachEvent = mEffectiveMinHourWidth;
+            else if (mNewWidthEachEvent > mMaxHourWidth)
+                mNewWidthEachEvent = mMaxHourWidth;
+
+            mCurrentOrigin.x = (mCurrentOrigin.x / mWidthEachEvent) * mNewWidthEachEvent;
+            mWidthEachEvent = mNewWidthEachEvent;
+            mNewWidthEachEvent = -1;
+        }
+        mNormalDistance = mHeightEachEvent / TOTAL_DISTANCE_EACH_NORNAL_TIME_STONE;
+        mLargeDistance = mHeightEachEvent / TOTAL_DISTANCE_EACH_LARGE_TIME_STONE;
 
         // If the new mCurrentOrigin.y is invalid, make it valid.
         if (mCurrentOrigin.y < getHeight() - mHeightEachEvent * 24 - mHeightEachEvent)
@@ -209,12 +185,12 @@ public class TimetableContainer extends View {
 
         Paint paint = new Paint();
         paint.setColor(Color.RED);
-        canvas.clipRect(mWidthEachEvent, 0, getWidth(), getHeight(), Region.Op.REPLACE);
-        canvas.drawRect(mWidthEachEvent, 0, getWidth(), getHeight(), paint);
+        canvas.clipRect(mWidthHeader, mHeightHeader, getWidth(), getHeight(), Region.Op.REPLACE);
+        canvas.drawRect(mWidthHeader, mHeightHeader, getWidth(), getHeight(), paint);
 
-        float startY = mHeightEachEvent + mCurrentOrigin.y;
+        float startY = mHeightHeader + mCurrentOrigin.y;
         for (int i = 0; i < mSizeStagesList; i++) {
-            int dx = (int) (mCurrentOrigin.x + mWidthEachEvent * i + mWidthEachEvent);
+            int dx = (int) (mCurrentOrigin.x + mWidthEachEvent * i + mWidthHeader);
             if (i % 2 == 0) {
                 canvas.drawRect(dx, startY, dx + mWidthEachEvent, getHeight(), paintEvenBg);
             } else {
@@ -246,8 +222,8 @@ public class TimetableContainer extends View {
         paintLineNoStroke.setColor(Color.WHITE);
         paintLineNoStroke.setStrokeWidth(1);
         for (int hourNumber = 0; hourNumber < 24; hourNumber++) {
-            float top = mCurrentOrigin.y + mHeightEachEvent * hourNumber + 10 + mHeightEachEvent;
-            int dx = (int) (mCurrentOrigin.x) + mWidthEachEvent;
+            float top = mCurrentOrigin.y + mHeightEachEvent * hourNumber + 10 + mHeightHeader;
+            int dx = (int) (mCurrentOrigin.x) + mWidthHeader;
             if (top < getHeight()) {
                 drawEvent(canvas, top, hourNumber, dx);
                 canvas.drawLine(dx, (int) top, mWidthEventContainer, (int) top, paintLineNoStroke);
@@ -255,11 +231,12 @@ public class TimetableContainer extends View {
             }
         }
 
+
         // Clip to paint header row only.
-        canvas.clipRect(mWidthEachEvent, 0, getWidth(), mHeightEachEvent, Region.Op.REPLACE);
+        canvas.clipRect(mWidthHeader, 0, getWidth(), mHeightHeader, Region.Op.REPLACE);
 
         // Draw the header background.
-        canvas.drawRect(mWidthEachEvent, 0, getWidth(), mHeightEachEvent, paintEvenBg2);
+        canvas.drawRect(mWidthHeader, 0, getWidth(), mHeightHeader, paintEvenBg2);
 
         // Draw the header row texts.
         Paint paintTextCounter = new Paint();
@@ -267,14 +244,29 @@ public class TimetableContainer extends View {
         paintTextCounter.setTextSize(mTextTitleStage);
         paintTextCounter.setTextAlign(Paint.Align.CENTER);
         paintTextCounter.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        Rect bounds = new Rect();
+
         for (int i = 0; i < mSizeStagesList; i++) {
-            int dx = (int) (mCurrentOrigin.x + mWidthEachEvent * i + mWidthEachEvent);
+            int dx = (int) (mCurrentOrigin.x + mWidthEachEvent * i + mWidthHeader);
             if (i % 2 == 0) {
-                canvas.drawRect(dx, 0, dx + mWidthEachEvent, mHeightEachEvent, paintEvenBg);
+                canvas.drawRect(dx, 0, dx + mWidthEachEvent, mHeightHeader, paintEvenBg);
             } else {
-                canvas.drawRect(dx, 0, dx + mWidthEachEvent, mHeightEachEvent, paintOddBg);
+                canvas.drawRect(dx, 0, dx + mWidthEachEvent, mHeightHeader, paintOddBg);
             }
-            canvas.drawText(mStages.get(i).getName(), dx + mWidthEachEvent / 2, mHeightEachEvent / 2, paintTextCounter);
+            String value = mStages.get(i).getName();
+            paintTextCounter.getTextBounds(value, 0, value.length(), bounds);
+
+            if (bounds.width() > mWidthEachEvent - 20) {
+                canvas.drawText("AAA", dx + (mWidthEachEvent / 2),
+                        mHeightEachEvent / 2 - (bounds.height() / 4) + (mTextTitleStage / 2), paintTextCounter);
+            } else {
+                canvas.drawText(value, dx + (mWidthEachEvent / 2),
+                        mHeightHeader / 2 - (bounds.height() / 4) + (mTextTitleStage / 2), paintTextCounter);
+            }
+//            StaticLayout mTextLayout = new StaticLayout("AAAAAAAAAA", mTextPaint, canvas.getWidth(), Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
+
+
+            //   canvas.drawText(mStages.get(i).getName(), dx + mWidthEachEvent / 2, mHeightHeader / 2, paintTextCounter);
         }
     }
 
@@ -312,9 +304,19 @@ public class TimetableContainer extends View {
             Rect bounds = new Rect();
             String value = mStages.get(i).getName();
             paintTextCounter.getTextBounds(value, 0, value.length(), bounds);
+            paintTextCounter.setTextAlign(Paint.Align.CENTER);
             int height = bounds.height();
-            canvas.drawText(value, dx + (mWidthEachEvent / 2),
-                    mHeightEachEvent / 2 - (height / 4) + (mTextTitleStage / 2), paintTextCounter);
+            int width = bounds.width();
+            Log.d("TAG", "width: " + width);
+            Log.d("TAG", "drawStages: " + mWidthEachEvent);
+            if (width > mWidthEachEvent - 20) {
+                canvas.drawText("AAA", dx + (mWidthEachEvent / 2),
+                        mHeightEachEvent / 2 - (height / 4) + (mTextTitleStage / 2), paintTextCounter);
+            } else {
+                canvas.drawText(value, dx + (mWidthEachEvent / 2),
+                        mHeightEachEvent / 2 - (height / 4) + (mTextTitleStage / 2), paintTextCounter);
+            }
+
         }
     }
 
@@ -322,9 +324,9 @@ public class TimetableContainer extends View {
         Paint paintEvenBg = new Paint();
         paintEvenBg.setColor(Color.GREEN);
         // Draw the background color for the header column.
-        canvas.drawRect(0, mHeightEachEvent, mWidthEachEvent, getHeight(), paintEvenBg);
+        canvas.drawRect(0, mHeightHeader, mWidthHeader, getHeight(), paintEvenBg);
         // Clip to paint in left column only.
-        canvas.clipRect(0, mHeightEachEvent, mWidthEachEvent, getHeight(), Region.Op.REPLACE);
+        canvas.clipRect(0, mHeightHeader, mWidthHeader, getHeight(), Region.Op.REPLACE);
 
         Paint painLineStroke = new Paint();
         painLineStroke.setColor(Color.WHITE);
@@ -335,23 +337,23 @@ public class TimetableContainer extends View {
         paintLineNoStroke.setStrokeWidth(1);
 
         for (int i = 0; i < 24; i++) {
-            float top = mCurrentOrigin.y + mHeightEachEvent * i + 10 + mHeightEachEvent;
+            float top = mCurrentOrigin.y + mHeightEachEvent * i + 10 + mHeightHeader;
             if (top < getHeight()) {
                 drawTextTime((int) top, canvas, i, mWidthEachEvent);
-                canvas.drawLine(mWidthEachEvent, (int) top, mWidthEachEvent - 20, (int) top, painLineStroke);
-                canvas.drawLine(mWidthEachEvent, (int) top + mNormalDistance, mWidthEachEvent - 10,
+                canvas.drawLine(mWidthHeader, (int) top, mWidthHeader - 20, (int) top, painLineStroke);
+                canvas.drawLine(mWidthHeader, (int) top + mNormalDistance, mWidthHeader - 10,
                         (int) top + mNormalDistance, paintLineNoStroke);
-                canvas.drawLine(mWidthEachEvent, (int) top + mNormalDistance * 2,
-                        mWidthEachEvent - 10, (int) top + mNormalDistance * 2, paintLineNoStroke);
+                canvas.drawLine(mWidthHeader, (int) top + mNormalDistance * 2,
+                        mWidthHeader - 10, (int) top + mNormalDistance * 2, paintLineNoStroke);
                 canvas.drawLine(
-                        mWidthEachEvent, (int) top + mHeightEachEvent / 2, mWidthEachEvent - 20,
+                        mWidthHeader, (int) top + mHeightEachEvent / 2, mWidthHeader - 20,
                         (int) top + mHeightEachEvent / 2, painLineStroke);
                 canvas.drawLine(
-                        mWidthEachEvent, (int) top + mNormalDistance * 4,
-                        mWidthEachEvent - 10, (int) top + mNormalDistance * 4, paintLineNoStroke);
+                        mWidthHeader, (int) top + mNormalDistance * 4,
+                        mWidthHeader - 10, (int) top + mNormalDistance * 4, paintLineNoStroke);
                 canvas.drawLine(
-                        mWidthEachEvent, (int) top + mNormalDistance * 5,
-                        mWidthEachEvent - 10, (int) top + mNormalDistance * 5, paintLineNoStroke);
+                        mWidthHeader, (int) top + mNormalDistance * 5,
+                        mWidthHeader - 10, (int) top + mNormalDistance * 5, paintLineNoStroke);
             }
         }
     }
@@ -390,7 +392,7 @@ public class TimetableContainer extends View {
         int widthText = bounds.width();
 
         canvas.drawText(value,
-                mWidthEachEvent / 2 - (widthText / 4) + (mTextTimeRuler / 2),
+                mWidthHeader / 2 - (widthText / 4) + (mTextTimeRuler / 2),
                 top - (height / 4) + (mTextTimeRuler / 2), paintTextCounter);
     }
 
@@ -406,8 +408,8 @@ public class TimetableContainer extends View {
         paintOclock.setStyle(Paint.Style.STROKE);
         // TODO: 4/12/18 load bitmap but not saving on cache
         Bitmap bitmapOclick = BitmapFactory.decodeResource(getResources(), R.drawable.time);
-        canvas.drawBitmap(bitmapOclick, (mWidthEachEvent / 2 - bitmapOclick.getWidth() / 2),
-                (mHeightEachEvent / 2 - bitmapOclick.getHeight() / 2), paintOclock);
+        canvas.drawBitmap(bitmapOclick, (mWidthHeader / 2 - bitmapOclick.getWidth() / 2),
+                (mHeightHeader / 2 - bitmapOclick.getHeight() / 2), paintOclock);
     }
 
     private void drawEvents(Canvas canvas) {
@@ -428,13 +430,15 @@ public class TimetableContainer extends View {
         }
     }
 
-    private int count = 0;
-
     private void drawEvent(Canvas canvas, float top, int i, int dx) {
         Paint paintTextCounter = new Paint();
-        paintTextCounter.setColor(Color.GREEN);
+      //  paintTextCounter.setColor(Color.GREEN);
         Paint paintTextCounter1 = new Paint();
         paintTextCounter1.setColor(Color.RED);
+        // stroke
+        paintTextCounter.setStyle(Paint.Style.STROKE);
+        paintTextCounter.setColor(Color.RED);
+        paintTextCounter.setStrokeWidth(2);
         RectF rectF;
         for (int j = 0; j < mStages.size(); j++) {
             if (mStages.get(j).getEvents().size() != 0) {
@@ -444,8 +448,6 @@ public class TimetableContainer extends View {
                     String timeHourEnd = mStages.get(j).getEvents().get(k).getTimeEnd().substring(0, 2);
                     String timeMinEnd = mStages.get(j).getEvents().get(k).getTimeEnd().substring(3, 5);
                     if (Integer.parseInt(timeHourStart) == i) {
-                        // Log.d("TAG", "drawEvent:x " + count++);
-
                         float dy = top + ((Integer.parseInt(timeMinStart) * mNormalDistance) / 10);
                         float lastDy = top + mHeightEachEvent * (Integer.parseInt(timeHourEnd) - Integer.parseInt(timeHourStart))
                                 + ((Integer.parseInt(timeMinEnd) * mNormalDistance) / 10);
@@ -506,8 +508,8 @@ public class TimetableContainer extends View {
 
         @Override
         public boolean onDown(MotionEvent e) {
-            // mScroller.forceFinished(true);
-            //mStickyScroller.forceFinished(true);
+            mScroller.forceFinished(true);
+            mStickyScroller.forceFinished(true);
             return true;
         }
 
@@ -542,16 +544,9 @@ public class TimetableContainer extends View {
 
         @Override
         public boolean onSingleTapConfirmed(MotionEvent e) {
-            float mDx = mTranslateX < 0 ? mTranslateX : 0;
-            float mDy = mTranslateY < 0 ? mTranslateY : 0;
             for (EventRect eventRect : mEventRects) {
                 if (eventRect.getRect() != null) {
-                    RectF rectF = new RectF();
-                    rectF.top = eventRect.getRect().top * mScaleFactor + mDy;
-                    rectF.right = eventRect.getRect().right * mScaleFactor + mDx;
-                    rectF.left = eventRect.getRect().left * mScaleFactor + mDx;
-                    rectF.bottom = eventRect.getRect().bottom * mScaleFactor + mDy;
-                    if (rectF.contains(e.getX(), e.getY())) {
+                    if (eventRect.getRect().contains(e.getX(), e.getY())) {
                         Toast.makeText(getContext(), "Name of events is " + eventRect.getEvent().getName(), Toast.LENGTH_SHORT).show();
                     }
                 }
@@ -564,84 +559,19 @@ public class TimetableContainer extends View {
     public boolean onTouchEvent(MotionEvent event) {
         mScaleDetector.onTouchEvent(event);
         boolean val = mGestureDetector.onTouchEvent(event);
-        switch (event.getAction() & MotionEvent.ACTION_MASK) {
-            case MotionEvent.ACTION_DOWN:
-                mMode = DRAG;
-                //We assign the current X and Y coordinate of the finger to startX and startY minus the previously translated
-                //amount for each coordinates This works even when we are translating the first time because the initial
-                //values for these two variables is zero.
-                mStartX = event.getX() - mPreviousTranslateX;
-                mStartY = event.getY() - mPreviousTranslateY;
-                break;
-
-            case MotionEvent.ACTION_MOVE:
-                mTranslateX = event.getX() - mStartX;
-                mTranslateY = event.getY() - mStartY;
-                //testing
-//                mTranslateX = 0;
-//                mTranslateY = 0;
-                //We cannot use startX and startY directly because we have adjusted their values using the previous translation values.
-                //This is why we need to add those values to startX and startY so that we can get the actual coordinates of the finger.
-                double distance = Math.sqrt(Math.pow(event.getX() - (mStartX + mPreviousTranslateX), 2) +
-                        Math.pow(event.getY() - (mStartY + mPreviousTranslateY), 2));
-                if (distance > 0) {
-                    mDragged = true;
-                }
-                break;
-
-            case MotionEvent.ACTION_POINTER_DOWN:
-                mMode = ZOOM;
-                break;
-
-            case MotionEvent.ACTION_UP:
-                mMode = NONE;
-                mDragged = false;
-
-                //All fingers went up, so let's save the value of translateX and translateY into previousTranslateX and
-                //previousTranslate
-                mPreviousTranslateX = mTranslateX;
-                mPreviousTranslateY = mTranslateY;
-                mCurrentScrollDirection = Direction.NONE;
-                mCurrentFlingDirection = Direction.NONE;
-                break;
-
-            case MotionEvent.ACTION_POINTER_UP:
-                mMode = DRAG;
-
-                //This is not strictly necessary; we save the value of translateX and translateY into previousTranslateX
-                //and previousTranslateY when the second finger goes up
-                mPreviousTranslateX = mTranslateX;
-                mPreviousTranslateY = mTranslateY;
-                break;
+        if (event.getAction() == MotionEvent.ACTION_UP && mCurrentFlingDirection == Direction.NONE) {
+            mCurrentScrollDirection = Direction.NONE;
         }
-        // Check after call of mGestureDetector, so mCurrentFlingDirection and mCurrentScrollDirection are set.
-//        if (event.getAction() == MotionEvent.ACTION_UP && mCurrentFlingDirection == Direction.NONE) {
-//            Log.d("TAG", "onTouchEvent: " + mEventRects.size());
-//            mCurrentScrollDirection = Direction.NONE;
-//        }
-
-        if ((mMode == DRAG && mScaleFactor != 1f && mDragged) || mMode == ZOOM) {
-            invalidate();
-        }
-
         return val;
     }
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        mHeightEventContainer = h;
-        mWidthEventContainer = w;
     }
 
 
     private enum Direction {
         NONE, HORIZONTAL, VERTICAL
-    }
-
-    public interface IScrollListener {
-        void scrollHorizontal(float currentX);
-
-        void scrollVertical(float currentY);
     }
 }
